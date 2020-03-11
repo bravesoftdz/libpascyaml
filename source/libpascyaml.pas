@@ -185,11 +185,232 @@ type
       \ref CYAML_ENUM, and \ref CYAML_FLAGS.  For mappings, it applies to
       matching of the mappings' keys.  For enums and flags it applies to the
       comparison of \ref cyaml_strval strings. }
-    CYAML_FLAG_CASE_INSENSITIVE                                      1 shl 8
+    CYAML_FLAG_CASE_INSENSITIVE                                      = 1 shl 8
   );
   cyaml_flag_e = cyaml_flag;
 
+  { Mapping between a string and a signed value.
+    Used for \ref CYAML_ENUM and \ref CYAML_FLAGS types. }
+  pcyaml_strval = ^cyaml_strval;
+  cyaml_strval = record
+    str : PChar;                   { String representing enum or flag value. }
+    val : QWord;                   { Value of given string. }
+  end;
+  cyaml_strval_t = cyaml_strval;
 
+  { Bitfield value info.
+    Used for \ref CYAML_BITFIELD type. }
+  pcyaml_bitdef = ^cyaml_bitdef;
+  cyaml_bitdef = record
+    name : PChar;                  { String representing the value's name. }
+    offset : Byte;                 { Bit offset to value in bitfield. }
+    bits : Byte;                   { Maximum bits available for value. }
+  end;
+  cyaml_bitdef_t = cyaml_bitdef;
+
+  pcyaml_schema_field = ^cyaml_schema_field;
+
+  { Schema definition for a value.
+    \note There are convenience macros for each of the types to assist in
+          building a CYAML schema data structure for your YAML documents.
+
+    This is the fundamental building block of CYAML schemas.  The load, save and
+    free functions take parameters of this type to explain what the top-level
+    type of the YAML document should be.
+
+    Values of type \ref CYAML_SEQUENCE and \ref CYAML_SEQUENCE_FIXED contain a
+    reference to another \ref cyaml_schema_value representing the type of the
+    entries of the sequence.  For example, if you want a sequence of integers,
+    you'd have a \ref cyaml_schema_value for the for the sequence value type,
+    and another for the integer value type.
+
+    Values of type \ref CYAML_MAPPING contain an array of
+    \ref cyaml_schema_field entries, defining the YAML keys allowed by the
+    mapping.  Each field contains a \ref cyaml_schema_value representing the
+    schema for the value. }
+  pcyaml_schema_value : ^cyaml_schema_value;
+  cyaml_schema_value = record
+    value_type : cyaml_type;       { The type of the value defined by this
+                                     schema entry. }
+    flags : cyaml_flag;            { Flags indicating value's characteristics. }
+    { Size of the value's client data type in bytes.
+      For example, `short` `int`, `long`, `int8_t`, etc are all signed integer
+      types, so they would have the type \ref CYAML_INT, however, they have
+      different sizes. }
+    data_size : Cardinal;
+    case Integer of                { Anonymous union containing type-specific
+                                     attributes. }
+      1 : (
+        { \ref CYAML_STRING type-specific schema data. }
+        string_schema : record
+          { Minimum string length (bytes).
+            \note Excludes trailing NUL. }
+          min : Cardinal;
+          { Maximum string length (bytes).
+            \note Excludes trailing NULL, so for character array
+		  strings (rather than pointer strings), this
+		  must be no more than `data_size - 1`. }
+          max : Cardinal;
+        end;
+      );
+      2 : (
+        { \ref CYAML_MAPPING type-specific schema data. }
+        mapping : record
+          { Array of cyaml mapping field schema definitions.
+            The array must be terminated by an entry with a NULL key.  See
+            \ref cyaml_schema_field_t and \ref CYAML_FIELD_END for more info. }
+          fields : pcyaml_schema_field;
+        end;
+      );
+      3 : (
+        { \ref CYAML_BITFIELD type-specific schema data. }
+        bitfields : record
+          { Array of bit definitions for the bitfield. }
+          bitdefs : pcyaml_bitdef;
+          { Entry count for bitdefs array. }
+          count : Cardinal;
+        end;
+      );
+      4 : (
+        { \ref CYAML_SEQUENCE and \ref CYAML_SEQUENCE_FIXED type-specific schema
+          data. }
+        sequence : record
+          { Schema definition for the type of the entries in the
+	    sequence.
+            All of a sequence's entries must be of the same type, and a sequence
+            can not have an entry type of type \ref CYAML_SEQUENCE (although
+            \ref CYAML_SEQUENCE_FIXED is allowed).  That is, you can't have a
+            sequence of variable-length sequences. }
+          entry : pcyaml_schema_value;
+          { Minimum number of sequence entries.
+            \note min and max must be the same for \ref CYAML_SEQUENCE_FIXED. }
+          min : Cardinal;
+          { Maximum number of sequence entries.
+            \note min and max must be the same for \ref CYAML_SEQUENCE_FIXED. }
+          max : Cardinal;
+        end;
+      );
+      5 : (
+        { \ref CYAML_ENUM and \ref CYAML_FLAGS type-specific schema data. }
+        enumeration : record
+          { Array of string / value mappings defining enum. }
+          strings : pcyaml_strval;
+          { Entry count for strings array. }
+          count : Cardinal;
+        end;
+      );
+  end;
+  cyaml_schema_value_t = cyaml_schema_value;
+
+  { Schema definition entry for mapping fields.
+
+    YAML mappings are key:value pairs.  CYAML only supports scalar mapping keys,
+    i.e. the keys must be strings.  Each mapping field schema contains a
+    \ref cyaml_schema_value to define field's value.
+
+    The schema for mappings is composed of an array of entries of this data
+    structure.  It specifies the name of the key, and the type of the value. It
+    also specifies the offset into the data at which value data should be
+    placed. The array is terminated by an entry with a NULL key. }
+  cyaml_schema_field = record
+    { String for YAML mapping key that his schema entry describes, or NULL to
+      indicated the end of an array of \ref cyaml_schema_field entries. }
+    key : PChar;
+    { Offset in data structure at which the value for this key should be
+      placed / read from. }
+    data_offset : Cardinal;
+    { \ref CYAML_SEQUENCE only: Offset to sequence entry count member in
+      mapping's data structure. }
+    count_offset : Cardinal;
+    { \ref CYAML_SEQUENCE only: Size in bytes of sequence entry count member in
+      mapping's data structure. }
+    count_size : Byte;
+    { Defines the schema for the mapping field's value. }
+    value : cyaml_schema_value;
+  end;
+  cyaml_schema_field_t = cyaml_schema_field;
+
+  { CYAML behavioural configuration flags for clients
+    These may be bitwise-ORed together. }
+  cyaml_cfg_flags = (
+    { This indicates CYAML's default behaviour. }
+    CYAML_CFG_DEFAULT                                                = 0,
+    { When set, unknown mapping keys are ignored when loading YAML. Without this
+      flag set, CYAML's default behaviour is to return with the error
+      \ref CYAML_ERR_INVALID_KEY. }
+    CYAML_CFG_IGNORE_UNKNOWN_KEYS                                    = 1 shl 0,
+    { When saving, emit mapping / sequence values in block style.
+      This setting can be overridden for specific values using schema value
+      flags (\ref cyaml_flag).
+      \note This only applies to values of type \ref CYAML_MAPPING,
+      \ref CYAML_SEQUENCE, or \ref CYAML_SEQUENCE_FIXED.
+      \note If both \ref CYAML_CFG_STYLE_BLOCK and \ref CYAML_CFG_STYLE_FLOW are
+      set, then block style takes precedence. }
+    CYAML_CFG_STYLE_BLOCK                                            = 1 shl 1,
+    { When saving, emit mapping / sequence values in flow style.
+      This setting can be overridden for specific values using schema value
+      flags (\ref cyaml_flag).
+      \note This only applies to values of type \ref CYAML_MAPPING,
+      \ref CYAML_SEQUENCE, or \ref CYAML_SEQUENCE_FIXED.
+      \note If both \ref CYAML_CFG_STYLE_BLOCK and \ref CYAML_CFG_STYLE_FLOW are
+      set, then block style takes precedence. }
+    CYAML_CFG_STYLE_FLOW                                             = 1 shl 2,
+    { When saving, emit "---" at document start and "..." at document end.
+      If this flag isn't set, these document delimiting marks will not be
+      emitted. }
+    CYAML_CFG_DOCUMENT_DELIM                                         = 1 shl 3,
+    { When comparing strings, compare without case sensitivity.
+      By default, strings are compared with case sensitivity. }
+    CYAML_CFG_CASE_INSENSITIVE                                       = 1 shl 4,
+    { When loading, don't allow YAML aliases in the document.
+      If this option is enabled, anchors will be ignored, and the error code
+      \ref CYAML_ERR_ALIAS will be returned if an alias is encountered.
+      Setting this removes the overhead of recording anchors, so it may be worth
+      setting if aliases are not required, and memory is constrained. }
+    CYAML_CFG_NO_ALIAS                                               = 1 shl 5
+  );
+  cyaml_cfg_flag_t = cyaml_cfg_flag;
+
+  { CYAML function return codes indicating success or reason for failure.
+    Use \ref cyaml_strerror() to convert an error code to a human-readable
+    string. }
+  cyaml_err = (
+    CYAML_OK,                      { Success. }
+    CYAML_ERR_OOM,                 { Memory allocation failed. }
+    CYAML_ERR_ALIAS,               { See \ref CYAML_CFG_NO_ALIAS. }
+    CYAML_ERR_FILE_OPEN,           { Failed to open file. }
+    CYAML_ERR_INVALID_KEY,         { Mapping key rejected by schema. }
+    CYAML_ERR_INVALID_VALUE,       { Value rejected by schema. }
+    CYAML_ERR_INVALID_ALIAS,       { No anchor found for alias. }
+    CYAML_ERR_INTERNAL_ERROR,      { Internal error in LibCYAML. }
+    CYAML_ERR_UNEXPECTED_EVENT,    { YAML event rejected by schema. }
+    CYAML_ERR_STRING_LENGTH_MIN,   { String length too short. }
+    CYAML_ERR_STRING_LENGTH_MAX,   { String length too long. }
+    CYAML_ERR_INVALID_DATA_SIZE,   { Value's data size unsupported. }
+    CYAML_ERR_TOP_LEVEL_NON_PTR,   { Top level type must be pointer. }
+    CYAML_ERR_BAD_TYPE_IN_SCHEMA,  { Schema contains invalid type. }
+    CYAML_ERR_BAD_MIN_MAX_SCHEMA,  { Schema minimum exceeds maximum. }
+    CYAML_ERR_BAD_PARAM_SEQ_COUNT, { Bad seq_count param for schema. }
+    CYAML_ERR_BAD_PARAM_NULL_DATA, { Client gave NULL data argument. }
+    CYAML_ERR_BAD_BITVAL_IN_SCHEMA,{ Bit value beyond bitfield size. }
+    CYAML_ERR_SEQUENCE_ENTRIES_MIN,{ Too few sequence entries. }
+    CYAML_ERR_SEQUENCE_ENTRIES_MAX,{ Too many sequence entries. }
+    CYAML_ERR_SEQUENCE_FIXED_COUNT,{ Mismatch between min and max. }
+    CYAML_ERR_SEQUENCE_IN_SEQUENCE,{ Non-fixed sequence in sequence. }
+    CYAML_ERR_MAPPING_FIELD_MISSING, { Required mapping field missing. }
+    CYAML_ERR_BAD_CONFIG_NULL_MEMFN, { Client gave NULL mem function. }
+    CYAML_ERR_BAD_PARAM_NULL_CONFIG, { Client gave NULL config arg. }
+    CYAML_ERR_BAD_PARAM_NULL_SCHEMA, { Client gave NULL schema arg. }
+    CYAML_ERR_LIBYAML_EMITTER_INIT,{ Failed to initialise libyaml. }
+    CYAML_ERR_LIBYAML_PARSER_INIT, { Failed to initialise libyaml. }
+    CYAML_ERR_LIBYAML_EVENT_INIT,  { Failed to initialise libyaml. }
+    CYAML_ERR_LIBYAML_EMITTER,     { Error inside libyaml emitter. }
+    CYAML_ERR_LIBYAML_PARSER,      { Error inside libyaml parser. }
+
+    { This is **not a valid return code** itself. }
+    CYAML_ERR__COUNT               { Count of CYAML return codes. }
+  );
+  cyaml_err_t = cyaml_err;
 
 {$IFDEF WINDOWS}
   const libYaml = 'libcyaml.dll';
@@ -197,6 +418,7 @@ type
 {$IFDEF LINUX}
   const libYaml = 'libcyaml.so';
 {$ENDIF}
+
 
 
 
