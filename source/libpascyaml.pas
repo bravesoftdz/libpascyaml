@@ -116,7 +116,7 @@ type
       are saved in YAML as empty values.
       Note, when you set \ref CYAML_FLAG_POINTER_NULL, then
       \ref CYAML_FLAG_POINTER is set automatically. }
-    CYAML_FLAG_POINTER_NULL                   = (1 shl 2) or CYAML_FLAG_POINTER,
+    CYAML_FLAG_POINTER_NULL          = (1 shl 2) or Longint(CYAML_FLAG_POINTER),
     { Permit storage of `NULL` values as special NULL strings in YAML.
       This extends \ref CYAML_FLAG_POINTER_NULL, but in addition to treating
       empty values as NULL, any of the following are also treated as NULL:
@@ -130,7 +130,7 @@ type
       Note, when you set \ref CYAML_FLAG_POINTER_NULL_STR, then both
       \ref CYAML_FLAG_POINTER and \ref CYAML_FLAG_POINTER_NULL are set
       automatically. }
-    CYAML_FLAG_POINTER_NULL_STR          = (1 shl 3) or CYAML_FLAG_POINTER_NULL,
+    CYAML_FLAG_POINTER_NULL_STR = (1 shl 3) or Longint(CYAML_FLAG_POINTER_NULL),
     { Make value handling strict.
       For \ref CYAML_ENUM and \ref CYAML_FLAGS types, in strict mode the YAML
       must contain a matching string.  Without strict, numerical values are also
@@ -228,7 +228,7 @@ type
     \ref cyaml_schema_field entries, defining the YAML keys allowed by the
     mapping.  Each field contains a \ref cyaml_schema_value representing the
     schema for the value. }
-  pcyaml_schema_value : ^cyaml_schema_value;
+  pcyaml_schema_value = ^cyaml_schema_value;
   cyaml_schema_value = record
     value_type : cyaml_type;       { The type of the value defined by this
                                      schema entry. }
@@ -369,7 +369,7 @@ type
       setting if aliases are not required, and memory is constrained. }
     CYAML_CFG_NO_ALIAS                                               = 1 shl 5
   );
-  cyaml_cfg_flag_t = cyaml_cfg_flag;
+  cyaml_cfg_flag_t = cyaml_cfg_flags;
 
   { CYAML function return codes indicating success or reason for failure.
     Use \ref cyaml_strerror() to convert an error code to a human-readable
